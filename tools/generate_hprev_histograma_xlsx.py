@@ -12,11 +12,12 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "hprev_histograma_esboco_visual.xlsx"
+ZIP_TIMESTAMP = (2026, 5, 14, 0, 0, 0)
 
 
 WEEKDAYS_PT = ("seg", "ter", "qua", "qui", "sex", "sab", "dom")
@@ -135,6 +136,9 @@ class Styles:
     TABLE_HEADER = 22
     WARNING = 23
     OK = 24
+    SECTION_LABOR = 25
+    SECTION_EQUIPMENT = 26
+    PARTIAL_TOTAL = 27
 
 
 def styles_xml() -> str:
@@ -163,6 +167,9 @@ def styles_xml() -> str:
         "FFE2E8F0",
         "FFFFF2CC",
         "FFDCFCE7",
+        "FF0F766E",
+        "FF7C2D12",
+        "FFDBEAFE",
     ]
     border_none = "<border><left/><right/><top/><bottom/><diagonal/></border>"
     border_thin = (
@@ -197,6 +204,9 @@ def styles_xml() -> str:
         (4, 12, 1, {"horizontal": "center", "vertical": "center", "wrapText": "1"}),
         (6, 13, 1, {"horizontal": "left", "vertical": "top", "wrapText": "1"}),
         (4, 14, 1, {"horizontal": "left", "vertical": "top", "wrapText": "1"}),
+        (3, 15, 1, {"horizontal": "left", "vertical": "center"}),
+        (3, 16, 1, {"horizontal": "left", "vertical": "center"}),
+        (4, 17, 1, {"horizontal": "center", "vertical": "center"}),
     ]
 
     font_xml = []
@@ -420,25 +430,45 @@ def build_visual_sheet() -> Worksheet:
         sheet.set(12, col, value, Styles.LEFT_HEADER)
 
     resources = [
-        (13, "SECAO: MAO DE OBRA                                      [+ recurso]", None, None),
-        (14, "Encarregado Civil", "Mao de obra", "Civil", "Diurno", "lideranca,campo"),
-        (15, "Pedreiro", "Mao de obra", "Civil", "Diurno", "alvenaria"),
-        (16, "Servente", "Mao de obra", "Civil", "Diurno", "apoio,campo"),
-        (17, "SECAO: EQUIPAMENTOS                                  [+ recurso]", None, None),
-        (18, "Guindaste 30t", "Equipamento", "Icar", "Diurno", "locado"),
-        (19, "Escavadeira hidraulica", "Equipamento", "Terraplenagem", "Diurno", "proprio"),
+        (13, "section", "SECAO: MAO DE OBRA                                      [+ recurso]", Styles.SECTION_LABOR),
+        (14, "resource", "Encarregado Civil", "Mao de obra", "Civil", "Diurno", "lideranca,campo"),
+        (15, "resource", "Pedreiro", "Mao de obra", "Civil", "Diurno", "alvenaria"),
+        (16, "resource", "Servente", "Mao de obra", "Civil", "Diurno", "apoio,campo"),
+        (17, "partial", "TOTAL PARCIAL - MAO DE OBRA", (14, 16)),
+        (18, "section", "SECAO: EQUIPAMENTOS                                  [+ recurso]", Styles.SECTION_EQUIPMENT),
+        (19, "resource", "Guindaste 30t", "Equipamento", "Icar", "Diurno", "locado"),
+        (20, "resource", "Escavadeira hidraulica", "Equipamento", "Terraplenagem", "Diurno", "proprio"),
+        (21, "partial", "TOTAL PARCIAL - EQUIPAMENTOS", (19, 20)),
     ]
     quantity_rows: dict[int, list[int]] = {}
     for item in resources:
         row = item[0]
-        if item[1].startswith("SECAO:"):
-            sheet.set(row, 1, item[1], Styles.SECTION)
+        row_type = item[1]
+        if row_type == "section":
+            _, _, label, section_style = item
+            sheet.set(row, 1, label, section_style)
             sheet.merge(row, 1, row, 5)
-            sheet.set(row, 6, " ", Styles.SECTION)
+            sheet.set(row, 6, " ", section_style)
             sheet.merge(row, 6, row, last_col)
             continue
 
-        _, name, kind, discipline, shift, tags = item
+        if row_type == "partial":
+            _, _, label, (start_row, end_row) = item
+            sheet.set(row, 1, label, Styles.TOTAL_LABEL)
+            sheet.merge(row, 1, row, 5)
+            for index, day in enumerate(days):
+                col = day_col[day]
+                col_letter = col_name(col)
+                cached_total = sum(quantity_rows[resource_row][index] for resource_row in range(start_row, end_row + 1))
+                sheet.set(
+                    row,
+                    col,
+                    Formula(f"SUM({col_letter}{start_row}:{col_letter}{end_row})", cached_total),
+                    Styles.WEEKEND_QUANTITY if day.weekday() >= 5 else Styles.PARTIAL_TOTAL,
+                )
+            continue
+
+        _, _, name, kind, discipline, shift, tags = item
         for col, value in enumerate([name, kind, discipline, shift, tags], start=1):
             sheet.set(row, col, value, Styles.RESOURCE)
 
@@ -459,7 +489,7 @@ def build_visual_sheet() -> Worksheet:
             sheet.set(row, day_col[day], value, Styles.WEEKEND_QUANTITY if is_weekend else Styles.QUANTITY)
         quantity_rows[row] = values
 
-    total_row = 20
+    total_row = 22
     sheet.set(total_row, 1, "TOTAL DE RECURSOS POR DIA", Styles.TOTAL_LABEL)
     sheet.merge(total_row, 1, total_row, 5)
     for index, day in enumerate(days):
@@ -469,17 +499,17 @@ def build_visual_sheet() -> Worksheet:
         sheet.set(
             total_row,
             col,
-            Formula(f"SUM({col_letter}14:{col_letter}16,{col_letter}18:{col_letter}19)", cached_total),
+            Formula(f"SUM({col_letter}17,{col_letter}21)", cached_total),
             Styles.WEEKEND_QUANTITY if day.weekday() >= 5 else Styles.TOTAL,
         )
 
     sheet.set(
-        22,
+        24,
         1,
         "Observacao: o step define o intervalo de exibicao das colunas de dias. Este exemplo usa step=1 para mostrar todos os dias.",
         Styles.NOTE,
     )
-    sheet.merge(22, 1, 22, last_col)
+    sheet.merge(24, 1, 24, last_col)
     sheet.freeze(13, 6)
     return sheet
 
@@ -519,11 +549,24 @@ def build_registration_sheet() -> Worksheet:
         for col, value in enumerate(phase, start=1):
             sheet.set(row, col, value, Styles.OK if col == 4 else Styles.FORM_VALUE)
 
-    sheet.set(17, 1, "Colunas Customizaveis dos Recursos", Styles.RESOURCE_TITLE)
+    sheet.set(17, 1, "Secoes de Recursos", Styles.RESOURCE_TITLE)
     sheet.merge(17, 1, 17, 5)
+    section_headers = ["Nome da secao *", "Cor do header", "Ordem", "Validacao", "Observacoes"]
+    for col, value in enumerate(section_headers, start=1):
+        sheet.set(18, col, value, Styles.TABLE_HEADER)
+    section_rows = [
+        ("MAO DE OBRA", "#0F766E", 1, "OK", "Cor configuravel pelo usuario no cadastro/edicao da secao."),
+        ("EQUIPAMENTOS", "#7C2D12", 2, "OK", "Cada secao deve ter header visualmente distinto."),
+    ]
+    for row, section in enumerate(section_rows, start=19):
+        for col, value in enumerate(section, start=1):
+            sheet.set(row, col, value, Styles.OK if col == 4 else Styles.FORM_VALUE)
+
+    sheet.set(23, 1, "Colunas Customizaveis dos Recursos", Styles.RESOURCE_TITLE)
+    sheet.merge(23, 1, 23, 5)
     custom_headers = ["Nome da coluna", "Tipo", "Obrigatoria?", "Opcoes pre-definidas", "Exemplo"]
     for col, value in enumerate(custom_headers, start=1):
-        sheet.set(18, col, value, Styles.TABLE_HEADER)
+        sheet.set(24, col, value, Styles.TABLE_HEADER)
     custom_rows = [
         ("Tipo", "dropdown", "Nao", "Mao de obra; Equipamento", "Mao de obra"),
         ("Disciplina", "dropdown", "Nao", "Civil; Icar; Terraplenagem", "Civil"),
@@ -531,19 +574,19 @@ def build_registration_sheet() -> Worksheet:
         ("Tags", "tags", "Nao", "Lista livre de tags", "lideranca,campo"),
         ("Observacoes", "string", "Nao", "", "Texto ou numero livre"),
     ]
-    for row, values in enumerate(custom_rows, start=19):
+    for row, values in enumerate(custom_rows, start=25):
         for col, value in enumerate(values, start=1):
             sheet.set(row, col, value, Styles.FORM_VALUE)
-    sheet.data_validations.append(("B19:B30", '"string,dropdown,tags"'))
-    sheet.data_validations.append(("C19:C30", '"Sim,Nao"'))
+    sheet.data_validations.append(("B25:B36", '"string,dropdown,tags"'))
+    sheet.data_validations.append(("C25:C36", '"Sim,Nao"'))
 
     sheet.set(
-        26,
+        32,
         1,
         "Regra: a coluna Nome do recurso e fixa, obrigatoria e nao pode ser alterada. As demais podem ser adicionadas/removidas pelo usuario.",
         Styles.WARNING,
     )
-    sheet.merge(26, 1, 26, 5)
+    sheet.merge(32, 1, 32, 5)
     return sheet
 
 
@@ -567,15 +610,25 @@ def build_auxiliary_sheet() -> Worksheet:
         for col, value in enumerate(values, start=1):
             sheet.set(row, col, value, Styles.FORM_VALUE)
 
-    sheet.set(11, 1, "Opcoes de dropdown sugeridas", Styles.RESOURCE_TITLE)
+    sheet.set(11, 1, "Cores customizaveis por secao", Styles.RESOURCE_TITLE)
     sheet.merge(11, 1, 11, 4)
+    color_rows = [
+        ("MAO DE OBRA", "#0F766E", "Verde petroleo", "Exemplo de cor inicial configurada pelo usuario."),
+        ("EQUIPAMENTOS", "#7C2D12", "Marrom", "Exemplo de cor inicial configurada pelo usuario."),
+    ]
+    for row, values in enumerate(color_rows, start=12):
+        for col, value in enumerate(values, start=1):
+            sheet.set(row, col, value, Styles.FORM_VALUE if col > 1 else Styles.FORM_LABEL)
+
+    sheet.set(16, 1, "Opcoes de dropdown sugeridas", Styles.RESOURCE_TITLE)
+    sheet.merge(16, 1, 16, 4)
     options = [
         ("Tipo", "Mao de obra", "Equipamento", ""),
         ("Disciplina", "Civil", "Icar", "Terraplenagem"),
         ("Turno", "Diurno", "Noturno", ""),
         ("Tags", "lideranca", "campo", "locado; proprio; apoio"),
     ]
-    for row, values in enumerate(options, start=12):
+    for row, values in enumerate(options, start=17):
         for col, value in enumerate(values, start=1):
             sheet.set(row, col, value, Styles.FORM_VALUE if col > 1 else Styles.FORM_LABEL)
     return sheet
@@ -597,7 +650,9 @@ def build_rules_sheet() -> Worksheet:
         ("Colunas fixas", "Nome do recurso e fixo, obrigatorio e nao editavel."),
         ("Colunas customizadas", "Usuario pode adicionar/remover colunas string, dropdown com opcoes pre-definidas ou tags."),
         ("Quantitativos", "Cada recurso recebe uma quantidade por dia no corpo direito do histograma."),
-        ("Totais", "Linha final soma os quantitativos dos recursos para cada dia."),
+        ("Totais parciais", "Cada secao possui uma linha de total parcial que soma os quantitativos diarios dos recursos daquela secao."),
+        ("Total geral", "Linha final soma os totais parciais das secoes para cada dia."),
+        ("Cores de secao", "Cada header de secao possui cor de fundo distinta e customizavel pelo usuario."),
         ("Fim de semana", "Colunas de sabado e domingo usam fundo levemente diferente."),
     ]
     sheet.set(3, 1, "Area", Styles.TABLE_HEADER)
@@ -606,8 +661,8 @@ def build_rules_sheet() -> Worksheet:
         sheet.set(row, 1, area, Styles.FORM_LABEL)
         sheet.set(row, 2, rule, Styles.NOTE)
 
-    sheet.set(17, 1, "Legenda visual", Styles.RESOURCE_TITLE)
-    sheet.merge(17, 1, 17, 2)
+    sheet.set(20, 1, "Legenda visual", Styles.RESOURCE_TITLE)
+    sheet.merge(20, 1, 20, 2)
     legend = [
         ("Azul escuro", "Titulo, RECURSOS e totais/secoes principais."),
         ("Roxo", "Linha de nome das fases."),
@@ -615,7 +670,7 @@ def build_rules_sheet() -> Worksheet:
         ("Verde claro", "Dias uteis decorridos e status OK."),
         ("Amarelo claro", "Avisos e observacoes de validacao."),
     ]
-    for row, (color, meaning) in enumerate(legend, start=18):
+    for row, (color, meaning) in enumerate(legend, start=21):
         sheet.set(row, 1, color, Styles.FORM_LABEL)
         sheet.set(row, 2, meaning, Styles.NOTE)
     return sheet
@@ -691,7 +746,7 @@ def root_rels_xml() -> str:
 
 
 def core_xml() -> str:
-    timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    timestamp = datetime(*ZIP_TIMESTAMP, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
@@ -725,16 +780,22 @@ def app_xml(sheets: list[Worksheet]) -> str:
 
 def write_xlsx(sheets: list[Worksheet]) -> None:
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+
+    def write_part(archive: ZipFile, filename: str, content: str) -> None:
+        info = ZipInfo(filename, ZIP_TIMESTAMP)
+        info.compress_type = ZIP_DEFLATED
+        archive.writestr(info, content)
+
     with ZipFile(OUTPUT, "w", ZIP_DEFLATED) as archive:
-        archive.writestr("[Content_Types].xml", content_types_xml(sheets))
-        archive.writestr("_rels/.rels", root_rels_xml())
-        archive.writestr("docProps/core.xml", core_xml())
-        archive.writestr("docProps/app.xml", app_xml(sheets))
-        archive.writestr("xl/workbook.xml", workbook_xml(sheets))
-        archive.writestr("xl/_rels/workbook.xml.rels", workbook_rels_xml(sheets))
-        archive.writestr("xl/styles.xml", styles_xml())
+        write_part(archive, "[Content_Types].xml", content_types_xml(sheets))
+        write_part(archive, "_rels/.rels", root_rels_xml())
+        write_part(archive, "docProps/core.xml", core_xml())
+        write_part(archive, "docProps/app.xml", app_xml(sheets))
+        write_part(archive, "xl/workbook.xml", workbook_xml(sheets))
+        write_part(archive, "xl/_rels/workbook.xml.rels", workbook_rels_xml(sheets))
+        write_part(archive, "xl/styles.xml", styles_xml())
         for index, sheet in enumerate(sheets, start=1):
-            archive.writestr(f"xl/worksheets/sheet{index}.xml", worksheet_xml(sheet))
+            write_part(archive, f"xl/worksheets/sheet{index}.xml", worksheet_xml(sheet))
 
 
 def main() -> None:
