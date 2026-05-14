@@ -48,7 +48,11 @@ O histograma deve funcionar como uma tabela operacional na qual a parte esquerda
 
 ### 2.3 Backend e persistencia
 
-- Utilizar Prisma ORM.
+- O backend deve ser desenvolvido em Python.
+- Utilizar FastAPI para a API HTTP.
+- Utilizar SQLAlchemy como ORM.
+- Utilizar Alembic para migrations do banco de dados.
+- Utilizar driver SQL Server compativel com SQLAlchemy, preferencialmente `pyodbc` com ODBC Driver 18.
 - O banco de dados inicial sera Microsoft SQL Server.
 - Em desenvolvimento, o SQL Server deve ser dockerizado.
 - Criar configuracao Docker/Docker Compose para subir o SQL Server em ambiente local de desenvolvimento.
@@ -64,22 +68,24 @@ O histograma deve funcionar como uma tabela operacional na qual a parte esquerda
   - `SQLSERVER_SA_PASSWORD`
   - `APP_PORT`
   - `VITE_API_BASE_URL`
+- `DATABASE_URL` deve usar formato compativel com SQLAlchemy para SQL Server, por exemplo `mssql+pyodbc://...`.
 - Nao hardcodar credenciais de banco no codigo.
-- Preparar migrations Prisma.
-- Usar TypeScript tambem no backend, caso seja necessario criar API propria.
+- Preparar migrations Alembic.
+- Usar Pydantic/FastAPI para schemas de entrada e saida da API.
 
 ### 2.4 Arquitetura sugerida
 
-Como Prisma exige execucao em ambiente backend, implemente uma arquitetura com:
+Como o acesso ao banco deve ficar no backend, implemente uma arquitetura com:
 
 - Frontend React/Vite/TypeScript.
-- Backend Node.js/TypeScript com API HTTP.
-- Prisma Client no backend.
+- Backend Python/FastAPI com API HTTP.
+- SQLAlchemy no backend.
+- Alembic para migrations.
 - SQL Server como banco.
 - Docker Compose para SQL Server em dev.
 - Scripts de desenvolvimento para subir frontend, backend e banco.
 
-Pode ser usado Express, Fastify ou outro framework HTTP simples. Escolha uma opcao consistente e mantenha o projeto facil de executar.
+Estruture o backend de forma simples e consistente, separando rotas, schemas Pydantic, modelos SQLAlchemy, camada de servico/regras de negocio e configuracao de banco.
 
 ## 3. Entidades principais
 
@@ -222,7 +228,7 @@ Regras:
 
 - Armazena o valor de cada coluna customizada para cada recurso.
 - Para colunas `dropdown`, validar se o valor pertence as opcoes cadastradas.
-- Para colunas `tags`, armazenar como JSON/lista ou tabela relacional, conforme melhor modelagem com Prisma e SQL Server.
+- Para colunas `tags`, armazenar como JSON/lista ou tabela relacional, conforme melhor modelagem com SQLAlchemy e SQL Server.
 - Para colunas `string`, aceitar texto livre.
 
 ### 3.7 Quantitativo diario do recurso
@@ -402,9 +408,9 @@ O endpoint `table-data` deve retornar os dados ja estruturados para renderizacao
 - Totais parciais por secao.
 - Total geral por dia.
 
-## 8. Modelo Prisma sugerido
+## 8. Modelo SQLAlchemy sugerido
 
-Crie um schema Prisma compativel com SQL Server contendo, no minimo:
+Crie modelos SQLAlchemy compativeis com SQL Server contendo, no minimo:
 
 - `Histogram`
 - `ProjectPhase`
@@ -423,7 +429,7 @@ Constraints importantes:
 - `ResourceQuantity`: unique composto por `resourceId` + `date`.
 - Relacionamentos com cascade ou restricoes explicitas bem definidas.
 
-Observacao: a regra de fases nao sobrepostas provavelmente precisara ser validada na camada de aplicacao, pois nao e trivial expressar como constraint simples em SQL Server via Prisma.
+Observacao: a regra de fases nao sobrepostas provavelmente precisara ser validada na camada de aplicacao, pois nao e trivial expressar como constraint simples em SQL Server via SQLAlchemy.
 
 ## 9. Calculos esperados
 
@@ -470,11 +476,11 @@ Entregar:
 - Tailwind configurado.
 - Formularios com react-hook-form uncontrolled.
 - Schemas Zod para validacao.
-- Backend TypeScript com API HTTP.
-- Prisma configurado para SQL Server.
+- Backend Python/FastAPI com API HTTP.
+- SQLAlchemy configurado para SQL Server.
 - Docker Compose para SQL Server em desenvolvimento.
 - `.env.example` com variaveis do banco e da aplicacao.
-- Migrations Prisma.
+- Migrations Alembic.
 - Tela de listagem de histogramas.
 - Tela/formulario de criacao e edicao de histograma.
 - CRUD de fases.
@@ -515,7 +521,7 @@ Entregar:
 - A tabela deve ter rolagem com headers fixos.
 - As linhas devem ser virtualizadas.
 - O projeto deve executar em ambiente local usando SQL Server dockerizado.
-- O acesso ao banco deve usar Prisma ORM.
+- O acesso ao banco deve usar SQLAlchemy ORM.
 - As credenciais devem vir de variaveis de ambiente.
 ```
 

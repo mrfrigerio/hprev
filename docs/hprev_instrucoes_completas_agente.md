@@ -47,7 +47,11 @@ Use essa planilha como guia visual para a tela principal do histograma.
 
 ### 2.3 Backend e banco
 
-- Utilizar Prisma ORM.
+- Backend em Python.
+- Utilizar FastAPI para expor a API HTTP.
+- Utilizar SQLAlchemy como ORM.
+- Utilizar Alembic para migrations do banco de dados.
+- Utilizar driver SQL Server compativel com SQLAlchemy, preferencialmente `pyodbc` com ODBC Driver 18.
 - Utilizar Microsoft SQL Server como banco inicial.
 - Em desenvolvimento, o SQL Server deve ser dockerizado.
 - Criar configuracao Docker Compose para ambiente local.
@@ -58,28 +62,29 @@ Use essa planilha como guia visual para a tela principal do histograma.
 Variaveis esperadas no ambiente:
 
 ```env
-DATABASE_URL="sqlserver://localhost:1433;database=hprev;user=sa;password=YourStrong!Passw0rd;trustServerCertificate=true"
+DATABASE_URL="mssql+pyodbc://sa:YourStrong%21Passw0rd@localhost:1433/hprev?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
 SQLSERVER_HOST=localhost
 SQLSERVER_PORT=1433
 SQLSERVER_DATABASE=hprev
 SQLSERVER_USER=sa
 SQLSERVER_PASSWORD=YourStrong!Passw0rd
 SQLSERVER_SA_PASSWORD=YourStrong!Passw0rd
-APP_PORT=3000
-VITE_API_BASE_URL=http://localhost:3000/api
+APP_PORT=8000
+VITE_API_BASE_URL=http://localhost:8000/api
 ```
 
 ### 2.4 Arquitetura sugerida
 
-Como o Prisma deve rodar no backend, implementar:
+Como o acesso ao banco deve ficar no backend, implementar:
 
 - Frontend React/Vite/TypeScript.
-- Backend Node.js/TypeScript com API HTTP.
-- Prisma Client no backend.
+- Backend Python/FastAPI com API HTTP.
+- SQLAlchemy no backend.
+- Alembic para migrations.
 - SQL Server via Docker Compose em desenvolvimento.
 - Scripts para rodar frontend, backend, migrations e banco local.
 
-Pode usar Express, Fastify ou framework HTTP equivalente. Escolha uma opcao simples e consistente.
+Estruture o backend com separacao clara entre rotas FastAPI, schemas Pydantic, modelos SQLAlchemy, camada de servico/regras de negocio e configuracao de banco.
 
 ## 3. Requisitos funcionais
 
@@ -339,7 +344,7 @@ totalGeral[data] = soma(totalParcialSecao[data] de todas as secoes)
 
 ## 6. Modelo de dados sugerido
 
-Criar schema Prisma para SQL Server com, no minimo, os modelos abaixo.
+Criar modelos SQLAlchemy para SQL Server com, no minimo, as entidades abaixo.
 
 ### 6.1 Histogram
 
@@ -411,7 +416,7 @@ Constraints:
 
 Observacao:
 
-- `options` pode ser JSON/string serializada ou uma tabela relacional separada, conforme melhor compatibilidade com Prisma e SQL Server.
+- `options` pode ser JSON/string serializada ou uma tabela relacional separada, conforme melhor compatibilidade com SQLAlchemy e SQL Server.
 
 ### 6.5 Resource
 
@@ -577,11 +582,10 @@ Entregar:
 
 - `docker-compose.yml` com SQL Server.
 - `.env.example` com variaveis documentadas.
-- Scripts no `package.json` para:
+- Scripts ou comandos documentados para:
   - instalar dependencias;
   - subir ambiente dev;
   - executar migrations;
-  - gerar Prisma Client;
   - rodar frontend;
   - rodar backend;
   - rodar testes.
@@ -632,10 +636,10 @@ O agente deve entregar:
 - Tailwind configurado.
 - Formularios com react-hook-form uncontrolled.
 - Schemas Zod.
-- Backend Node.js/TypeScript.
+- Backend Python/FastAPI.
 - API HTTP.
-- Prisma configurado para SQL Server.
-- Migrations Prisma.
+- SQLAlchemy configurado para SQL Server.
+- Migrations Alembic.
 - Docker Compose com SQL Server.
 - `.env.example`.
 - Tela de listagem de histogramas.
@@ -658,7 +662,7 @@ O agente deve entregar:
 O trabalho sera considerado completo quando:
 
 - For possivel rodar o ambiente local com SQL Server dockerizado.
-- O Prisma estiver conectado ao SQL Server usando variaveis de ambiente.
+- O SQLAlchemy estiver conectado ao SQL Server usando variaveis de ambiente.
 - For possivel criar, listar, editar e remover histogramas.
 - O nome do histograma for validado como unico.
 - For possivel criar fases dentro do periodo do histograma.
